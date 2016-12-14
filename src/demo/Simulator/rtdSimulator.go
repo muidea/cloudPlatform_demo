@@ -96,7 +96,7 @@ func simuValue(client *rpc.Client, simulatorName string, pointName []string) {
 
 func main() {
 	var svrIP = "127.0.0.1"
-	var svrPort = 123400
+	var svrPort = 12340
 	var simuName = ""
 	var simueNum = 100
 	var offSet = 100
@@ -113,7 +113,8 @@ func main() {
 
 	forever := make(chan bool)
 
-	client, err := rpc.DialHTTP("tcp", "127.0.0.1:1234")
+	svrAddr := fmt.Sprintf("%s:%d", svrIP, svrPort)
+	client, err := rpc.DialHTTP("tcp", svrAddr)
 	if err != nil {
 		log.Fatal("dialing:", err)
 	}

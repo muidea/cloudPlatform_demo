@@ -19,9 +19,9 @@ func failOnError(err error, msg string) {
 	}
 }
 
-func saveData(msgs <-chan amqp.Delivery) {
+func saveData(dbAddr, dbName string, msgs <-chan amqp.Delivery) {
 	dbHelper := dbHelper.NewDBHelper()
-	dbHelper.Open("127.0.0.1", "cloundPlatform-mongod")
+	dbHelper.Open(dbAddr, dbName)
 	defer dbHelper.Close()
 
 	// 每小时存一个collection
@@ -89,7 +89,11 @@ func saveData(msgs <-chan amqp.Delivery) {
 
 func main() {
 	var rabbitmq = ""
+	var mongodbAddr = ""
+	var mongodbName = ""
 	flag.StringVar(&rabbitmq, "Rabbitmq", "amqp://guest:guest@localhost:5672/", "rabbitmq address")
+	flag.StringVar(&mongodbAddr, "DataBaseSvr", "127.0.0.1", "mongodb server address")
+	flag.StringVar(&mongodbName, "DataBaseName", "cloudPlatform-mongodb", "mongodb database name")
 	flag.Parse()
 
 	conn, err := amqp.Dial(rabbitmq)
@@ -123,7 +127,7 @@ func main() {
 
 	forever := make(chan bool)
 
-	go saveData(msgs)
+	go saveData(mongodbAddr, mongodbName, msgs)
 
 	log.Printf(" [*] Waiting for messages. To exit press CTRL+C")
 	<-forever
