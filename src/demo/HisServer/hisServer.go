@@ -7,9 +7,10 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"martini"
 	"net/http"
 	"time"
+
+	"github.com/go-martini/martini"
 
 	"github.com/streadway/amqp"
 )
