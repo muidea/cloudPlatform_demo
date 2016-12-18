@@ -26,21 +26,18 @@ type RtdRoutine struct {
 	channel *amqp.Channel
 }
 
-// PostData 实时数据处理例程
-func (rtd *RtdRoutine) PostData(request *model.RTDPacketRequest, response *model.RTDPacketResponse) error {
+func (rtd *RtdRoutine) sendData2MQ(queueName string, data interface{}) {
 	q, err := rtd.channel.QueueDeclare(
-		"hello", // name
-		false,   // durable
-		false,   // delete when unused
-		false,   // exclusive
-		false,   // no-wait
-		nil,     // arguments
+		queueName, // name
+		false,     // durable
+		false,     // delete when unused
+		false,     // exclusive
+		false,     // no-wait
+		nil,       // arguments
 	)
 	failOnError(err, "Failed to declare a queue")
 
-	//log.Printf("PostData, dataSize:%d", len(request.RtdData))
-
-	body, err := json.Marshal(request.RtdData)
+	body, err := json.Marshal(data)
 	failOnError(err, "Failed to encode packet data")
 	err = rtd.channel.Publish(
 		"",     // exchange
@@ -53,6 +50,15 @@ func (rtd *RtdRoutine) PostData(request *model.RTDPacketRequest, response *model
 		})
 
 	failOnError(err, "Failed to publish a message")
+}
+
+// PostData 实时数据处理例程
+func (rtd *RtdRoutine) PostData(request *model.RTDPacketRequest, response *model.RTDPacketResponse) error {
+	rtd.sendData2MQ("rtdPacket", request.RtdData)
+
+	for _, data := range request.RtdData {
+		rtd.sendData2MQ(data.Name, data)
+	}
 
 	return nil
 }

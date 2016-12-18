@@ -1,2 +1,2 @@
-# cloundPlatform_demo
+# cloudPlatform_demo
 some demo program

@@ -1,8 +1,8 @@
 FROM alpine
 
-ADD HisServer /usr/local/cloundPlatform/
-ADD RtdServer /usr/local/cloundPlatform/
-ADD Simulator /usr/local/cloundPlatform/
+ADD HisServer /usr/local/cloudPlatform/
+ADD RtdServer /usr/local/cloudPlatform/
+ADD Simulator /usr/local/cloudPlatform/
 
 
-ENTRYPOINT ["/usr/local/cloundPlatform/HisServer","-Rabbitmq='amqp://guest:guest@localhost:5672/'"]
+ENTRYPOINT ["/usr/local/cloudPlatform/HisServer","-Rabbitmq='amqp://guest:guest@localhost:5672/'"]
