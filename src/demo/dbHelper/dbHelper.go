@@ -2,10 +2,17 @@ package dbHelper
 
 import mgo "gopkg.in/mgo.v2"
 
+// CollectionInfo Collection信息
+type CollectionInfo struct {
+	Name        string
+	RecordCount int
+}
+
 // MongoDBHelper MongonDB操作助手
 type MongoDBHelper interface {
 	Open(svrAddr, databaseName string) bool
 	Close()
+	Collections() ([]CollectionInfo, bool)
 	FetchCollection(name string) (*mgo.Collection, bool)
 }
 
@@ -41,18 +48,28 @@ func (s *impl) Close() {
 	s.session.Close()
 }
 
-func (s *impl) CollectionName() ([]string, bool) {
+func (s *impl) Collections() ([]CollectionInfo, bool) {
+	collections := []CollectionInfo{}
 	collectNames := []string{}
 	if s.database == nil {
-		return collectNames, false
+		return collections, false
 	}
 
 	collectNames, err := s.database.CollectionNames()
 	if err != nil {
-		return collectNames, false
+		return collections, false
 	}
 
-	return collectNames, true
+	for _, name := range collectNames {
+		info := CollectionInfo{}
+		info.Name = name
+		c := s.database.C(name)
+		info.RecordCount, _ = c.Count()
+
+		collections = append(collections, info)
+	}
+
+	return collections, true
 }
 
 func (s *impl) FetchCollection(name string) (*mgo.Collection, bool) {
@@ -61,6 +78,5 @@ func (s *impl) FetchCollection(name string) (*mgo.Collection, bool) {
 	}
 
 	c := s.database.C(name)
-	c.Count()
 	return c, c != nil
 }

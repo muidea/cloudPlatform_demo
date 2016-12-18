@@ -7,10 +7,15 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"martini"
+	"net/http"
 	"time"
 
 	"github.com/streadway/amqp"
 )
+
+var mongodbAddr = ""
+var mongodbName = ""
 
 func failOnError(err error, msg string) {
 	if err != nil {
@@ -19,9 +24,9 @@ func failOnError(err error, msg string) {
 	}
 }
 
-func saveData(dbAddr, dbName string, msgs <-chan amqp.Delivery) {
+func saveData(msgs <-chan amqp.Delivery) {
 	dbHelper := dbHelper.NewDBHelper()
-	dbHelper.Open(dbAddr, dbName)
+	dbHelper.Open(mongodbAddr, mongodbName)
 	defer dbHelper.Close()
 
 	// 每小时存一个collection
@@ -87,10 +92,25 @@ func saveData(dbAddr, dbName string, msgs <-chan amqp.Delivery) {
 	}
 }
 
+func collectionHandler(res http.ResponseWriter, req *http.Request) {
+	dbHelper := dbHelper.NewDBHelper()
+	dbHelper.Open(mongodbAddr, mongodbName)
+	defer dbHelper.Close()
+
+	result, _ := dbHelper.Collections()
+	b, err := json.Marshal(result)
+	if err != nil {
+		panic("json.Marshal, failed, err:" + err.Error())
+	}
+
+	res.Write(b)
+}
+
+func collectionDataHandler(res http.ResponseWriter, req *http.Request) {
+}
+
 func main() {
 	var rabbitmq = ""
-	var mongodbAddr = ""
-	var mongodbName = ""
 	flag.StringVar(&rabbitmq, "Rabbitmq", "amqp://guest:guest@localhost:5672/", "rabbitmq address")
 	flag.StringVar(&mongodbAddr, "DataBaseSvr", "127.0.0.1", "mongodb server address")
 	flag.StringVar(&mongodbName, "DataBaseName", "cloudPlatform-mongodb", "mongodb database name")
@@ -125,10 +145,14 @@ func main() {
 	)
 	failOnError(err, "Failed to register a consumer")
 
-	forever := make(chan bool)
-
-	go saveData(mongodbAddr, mongodbName, msgs)
+	go saveData(msgs)
 
 	log.Printf(" [*] Waiting for messages. To exit press CTRL+C")
-	<-forever
+	m := martini.Classic()
+
+	m.Get("/collection/", collectionHandler)
+
+	m.Get("/collection/data/", collectionDataHandler)
+
+	m.Run()
 }
