@@ -8,9 +8,14 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
+	"gopkg.in/mgo.v2/bson"
+
 	"github.com/go-martini/martini"
+
+	"strconv"
 
 	"github.com/streadway/amqp"
 )
@@ -23,6 +28,20 @@ func failOnError(err error, msg string) {
 		log.Fatalf("%s: %s", msg, err)
 		panic(fmt.Sprintf("%s: %s", msg, err))
 	}
+}
+
+// splitParam 分割URL参数
+func splitParam(params string) map[string]string {
+	result := make(map[string]string)
+
+	for _, param := range strings.Split(params, "&") {
+		items := strings.Split(param, "=")
+		if len(items) == 2 {
+			result[strings.ToLower(items[0])] = items[1]
+		}
+	}
+
+	return result
 }
 
 func saveData(msgs <-chan amqp.Delivery) {
@@ -107,7 +126,93 @@ func collectionHandler(res http.ResponseWriter, req *http.Request) {
 	res.Write(b)
 }
 
+// CollectionHisData Collection历史数据
+type CollectionHisData struct {
+	ErrCode   int
+	Reason    string
+	Name      string
+	BeginTime int64
+	EndTime   int64
+	Data      []model.DataValue
+}
+
 func collectionDataHandler(res http.ResponseWriter, req *http.Request) {
+	dbHelper := dbHelper.NewDBHelper()
+	dbHelper.Open(mongodbAddr, mongodbName)
+	defer dbHelper.Close()
+
+	result := CollectionHisData{BeginTime: 0, EndTime: 0}
+	params := splitParam(req.URL.RawQuery)
+	for true {
+		collectionName, found := params["collection"]
+		if !found {
+			result.ErrCode = 1
+			result.Reason = "请指定Collection"
+			break
+		}
+		pointName, found := params["point"]
+		if !found {
+			result.ErrCode = 1
+			result.Reason = "请指定Point"
+			break
+		}
+		bTime, found := params["begintime"]
+		if !found {
+			result.ErrCode = 1
+			result.Reason = "请指定beginTime"
+			break
+		}
+		beginTime, err := strconv.Atoi(bTime)
+		if err != nil {
+			result.ErrCode = 1
+			result.Reason = "非法beginTime"
+			break
+		}
+		eTime, found := params["endtime"]
+		if !found {
+			result.ErrCode = 1
+			result.Reason = "请指定endTime"
+			break
+		}
+		endTime, err := strconv.Atoi(eTime)
+		if err != nil {
+			result.ErrCode = 1
+			result.Reason = "非法endTime"
+			break
+		}
+
+		collection, found := dbHelper.FetchCollection(collectionName)
+		if !found {
+			result.ErrCode = 1
+			result.Reason = "无效Collection参数"
+			break
+		}
+
+		rtdData := []model.RTDData{}
+		collection.Find(bson.M{"name": pointName}).All(&rtdData)
+		log.Printf("filter data, Collection:%s, Name:%s, beginTime:%d, endTime:%d, count:%d", collectionName, pointName, beginTime, endTime, len(rtdData))
+		for _, val := range rtdData {
+			if val.TimeStamp >= int64(beginTime) && val.TimeStamp <= int64(endTime) {
+				if result.BeginTime == 0 {
+					result.BeginTime = val.TimeStamp
+				}
+
+				result.EndTime = val.TimeStamp
+				pointVal := model.DataValue{Value: val.Value, Quality: val.Quality, TimeStamp: val.TimeStamp}
+				result.Data = append(result.Data, pointVal)
+			}
+		}
+		result.Name = pointName
+
+		break
+	}
+
+	b, err := json.Marshal(result)
+	if err != nil {
+		panic("json.Marshal, failed, err:" + err.Error())
+	}
+
+	res.Write(b)
 }
 
 func main() {
