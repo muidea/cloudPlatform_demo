@@ -130,7 +130,52 @@ func NewSimulator(dataType int) Simulator {
 	}
 }
 
-func simuValue(client *rpc.Client, simulatorName string, dataType int, pointName []string) {
+type rtdServer struct {
+	svrAddr string
+	client  *rpc.Client
+}
+
+func (s *rtdServer) Connect() bool {
+	client, err := rpc.DialHTTP("tcp", s.svrAddr)
+	if err != nil {
+		log.Print("dialing:", err)
+		return false
+	}
+
+	s.client = client
+	return true
+}
+
+func (s *rtdServer) DisConnect() {
+	s.client.Close()
+	s.client = nil
+}
+
+func (s *rtdServer) Go(serviceMethod string, args interface{}, reply interface{}, done chan *rpc.Call) bool {
+	if s.client == nil {
+		if !s.Connect() {
+			return false
+		}
+	}
+
+	ret := s.client.Go(serviceMethod, args, reply, done)
+	if ret != nil {
+		if ret.Error != nil {
+			s.DisConnect()
+
+			return false
+		}
+	}
+
+	return true
+}
+
+func newRtdRPCServer(rtdAddr string) *rtdServer {
+	rtd := rtdServer{svrAddr: rtdAddr, client: nil}
+	return &rtd
+}
+
+func simuValue(rtdSvr *rtdServer, simulatorName string, dataType int, pointName []string) {
 	point2Simulator := map[string]Simulator{}
 	for _, point := range pointName {
 		point2Simulator[point] = NewSimulator(dataType)
@@ -168,7 +213,10 @@ func simuValue(client *rpc.Client, simulatorName string, dataType int, pointName
 		}
 
 		rsp := &model.RTDPacketResponse{}
-		client.Go("RtdRoutine.PostData", args, rsp, nil)
+		ret := rtdSvr.Go("RtdRoutine.PostData", args, rsp, nil)
+		if !ret {
+			log.Print("rpc call failed")
+		}
 	}
 }
 
@@ -194,11 +242,8 @@ func main() {
 	forever := make(chan bool)
 
 	svrAddr := fmt.Sprintf("%s:%d", svrIP, svrPort)
-	client, err := rpc.DialHTTP("tcp", svrAddr)
-	if err != nil {
-		log.Fatal("dialing:", err)
-	}
-	defer client.Close()
+	rtdServer := newRtdRPCServer(svrAddr)
+	defer rtdServer.DisConnect()
 
 	pointName := []string{}
 	i := 1
@@ -214,7 +259,7 @@ func main() {
 
 	log.Printf("construct point ok, size:%d", len(pointName))
 
-	go simuValue(client, simuName, dataType, pointName)
+	go simuValue(rtdServer, simuName, dataType, pointName)
 
 	log.Printf(" [*] To exit press CTRL+C")
 	<-forever
